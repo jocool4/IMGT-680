@@ -1,0 +1,428 @@
+<html>
+<title>AC 6.2 Air Force Release Home Use Install/Uninstall Utility</title>
+<HTA:APPLICATION 
+     ID="objMyHTA" 
+     APPLICATIONNAME="AC 6.2 Air Force Release Home Use Install/Uninstall Utility"
+     SCROLL="yes"
+     SINGLEINSTANCE="yes"
+     WINDOWSTATE="maximize"
+>
+
+<!-- ************************* -->
+
+<head>
+<script language="vbscript">
+'==========================================================================
+'    AC 6.2 Air Force Release Home Use Install/Uninstall Utility
+'          Developed by AF PKI SPO
+'          Last updated:  07/01/2011
+'
+'	                    
+'    GENERAL INFO: 
+'    This utility allows the user to choose to install or uninstall AC 6.2 AFR for use on home workstations.
+'    If installation is chosen, this utility also installs the following in addition to AC 6.2 AFR:
+'        -- Windows Installer ver 3.1 (req'd for AC 6.2 install on XP SP2 and earlier OS)
+'        -- Trust in DoD and AF PKI certificates on the workstation (for ease in accessing DoD secure sites)
+'		(as of this writing includes trust up through DoD CA 26)
+'        -- Latest cumulative patch for AC 6.2 (as of this writing Build 119)
+'        -- Outlook Web Access SMIME control (setupmcl.exe)
+'    
+'     
+'   
+'==========================================================================
+
+Option Explicit
+On Error Resume Next
+
+' variable declarations
+Dim WshShell							'Windows shell object
+Dim objOutFile							'Error File object
+Dim objFSO								'File object
+Dim intRet			
+Dim strCmd								'String to build command in
+Dim agreestatus							'Indicates whether user has agreed to risk
+Dim objItem
+Dim objShell
+Dim objWMIService							'WMI object
+Dim objOS								'Operating System object
+Dim strOS								'String for Operating System
+Dim strSP
+Dim colOSes      
+Dim strExecuteCall                     			 'Flag to indicate whether to continue install or not 
+Dim locMSIE								 'Location of "MSIE" within browser string
+Dim strIE								 'IE version - string
+Dim numberIE							 'IE version - converted to numeric
+Dim strNeedInstaller					'Flag to indicate if Windows 3.1 installer required
+Dim str64OS						'Flag to indicate OS is 64-bit
+Dim strOSRegKey                                         'Registry Key entry that has OS info for 32-bit or 64-bit
+Dim strAC6164installed					'Flag to indicate if AC61 64-bit installed on 64-bit OS
+Dim strAC6132installed					'Flag to indicate if AC61 32-bit installed on 64-bit OS
+Dim strAC61RegKey					'Registry Key entry that tells if AC61 installed
+
+
+
+'=====================================================================================
+'    When window gets loaded
+'=====================================================================================
+Sub Window_OnLoad
+'	self.ResizeTo 600,600				'Resize window
+'	self.MoveTo 10,10	
+
+
+section1.InnerHTML = "<center> </center>"
+End Sub
+
+'=====================================================================================
+'     Exit Button Clicked
+'=====================================================================================
+Sub exitsub
+   section1.InnerHTML = "<font color='white'>Quit button pushed </font>" 
+   window.close()       
+end Sub
+
+'=====================================================================================
+'    Submit Button Clicked
+'=====================================================================================
+Sub btnOK_OnClick
+Set WshShell = CreateObject("WScript.Shell")
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+strSP = 0
+strExecuteCall = 0
+agreestatus = 0						
+
+		
+if UserOption2(0).Checked Then			'Install option selected by user
+		
+		RiskAgreement()  				'Display User Agreement
+      
+		If agreestatus = 0 Then              
+	            msgbox "You did not indicate acceptance of the User Agreement.  Installation will not continue.  If you want to install ActivClient 6.2, run this program again and select the button indicating your acceptance of User Agreement."
+			window.close      'Line 100
+		Else
+
+		Operating_System						'Get OS & IE info 
+							'
+			If strExecuteCall = 0 Then                'If OS & IE did not meet min reqmts, then stop
+				window.close()
+			Else
+
+				InstallAC()	
+				msgbox "ActivClient 6.2 installation is complete, unless you previously received a pop-up informing you of a problem preventing installation.   Please reboot your workstation as soon as practical in order to access all ActivClient 6.2 features.  If you were notified of problems preventing AC 6.2 installation, please correct those and then try using this installation utility again.",0,"AC 6.2 Home Use Installation" 
+            	End If
+		End If
+				 
+elseif UserOption2(1).Checked Then		'Uninstall option selected by user
+		
+		Operating_System
+		
+		UninstallAC()
+			
+	
+End If
+
+window.close()
+
+End Sub
+
+
+'=====================================================================================
+'    Install AC 6.2 and Certificate Trust
+'=====================================================================================
+Sub InstallAC()
+
+
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient.  You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' as appropriate to continue with the installation.   You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'red'>in process </font>"
+
+
+
+strCmd = "msiexec /i NIPRDoDCerts_v5500.msi /qb! REBOOT=ReallySuppress" 			     'Install Trust in DoD & AF PKI Certicates 
+intRet = WshShell.Run (strCmd, 1, true)	
+
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient. You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' to continue with the installation.  You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'lime'> completed. <br></font><font color = 'yellow'>Step 2 of 6:  Updating Windows Installer (for select Operating Systems) -- </font><font color = 'red'>in process </font>"
+
+
+
+If strNeedInstaller = 1 Then
+    strCmd = "windowsInstaller-KB893803-V2-x86.exe /norestart /quiet"    'Install Windows Installer 3.1 - required for AC 6.2 install on XP SP2 or below
+    intRet = WshShell.Run (strCmd, 1, true)	
+End If
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient.   You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' to continue with the installation.You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 2 of 6:  Updating Windows Installer (for select Operating Systems) -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 3 of 6: Uninstalling ActivClient 6.1 (if necessary) -- </font><font color = 'red'>in process</font>"
+
+
+If (str64OS = 1) Then             'If OS is 64-bit then install 64-bit AC
+
+
+
+     If (strAC6132installed = 1) Then
+
+         msgbox "ActivClient 6.1 must be uninstalled before ActivClient 6.2 can be installed.  After ActivClient 6.1 is uninstalled, you will be asked whether you wish to restart your computer now.  You must select 'No' at the prompt in order to continue with the ActivClient 6.2 installation."
+         strCmd = "msiexec /x {AC194855-F7AC-4D04-B4C9-07BA46FCB697}"      'Removing AC 61 first
+         intRet = WshShell.Run (strCmd, 1, true)
+
+     End If
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient.   You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' to continue with the installation.You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 2 of 6:  Updating Windows Installer (for select Operating Systems) -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 3 of 6: Uninstalling ActivClient 6.1 (if necessary) -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 4 of 6: Installing ActivClient 6.2 Baseline Package for 64-bit OS -- </font><font color = 'red'>in process</font>"
+
+     
+
+     strCmd = "msiexec /i ActivClient_CAC_6.2_AFR_x64_HU.msi /qb! REBOOT=ReallySuppress"   	 'Install AC6.2
+     intRet = WshShell.Run (strCmd, 1, true)	
+
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient.   You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' to continue with the installation.You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 2 of 6:  Updating Windows Installer (for select Operating Systems) -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 3 of 6: Uninstalling ActivClient 6.1 (if necessary) -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 4 of 6: Installing ActivClient 6.2 Baseline Package for 64-bit OS -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 5 of 6: Installing ActivClient 6.2 Patch for Build 119 -- </font><font color = 'red'>in process</font>"
+     
+
+     strCmd = "msiexec /p ActivClient_6.2_x64_Build_119.msp /qb! REBOOT=ReallySuppress"   	 			'Install AC6.2 Patch for Build 63
+     intRet = WshShell.Run (strCmd, 1, true)
+
+Else                               'if not 64-bit OS then install 32-bit AC
+
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient.   You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' to continue with the installation.You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 2 of 6:  Updating Windows Installer (for select Operating Systems) -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 3 of 6: Uninstalling ActivClient 6.1 (if necessary) -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 4 of 6: Installing ActivClient 6.2 Baseline Package for 32-bit OS -- </font><font color = 'red'>in process</font>"
+
+
+         
+
+
+     strCmd = "msiexec /i ActivClient_CAC_6.2_AFR_x86_HU.msi /qb! REBOOT=ReallySuppress"   	 'Install AC6.2
+     intRet = WshShell.Run (strCmd, 1, true)	
+
+     
+
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient.   You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' to continue with the installation.You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 2 of 6:  Updating Windows Installer (for select Operating Systems) -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 3 of 6: Uninstalling ActivClient 6.1 (if necessary) -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 4 of 6: Installing ActivClient 6.2 Baseline Package for 32-bit OS -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 5 of 6: Installing ActivClient 6.2 Patch for Build 119 -- </font><font color = 'red'>in process</font>"
+
+     strCmd = "msiexec /p ActivClient_6.2_x86_Build_119.msp /qb! REBOOT=ReallySuppress"   	 			'Install AC6.2 Patch for Build 63
+     intRet = WshShell.Run (strCmd, 1, true)
+End if
+
+Const OverwriteExisting = True
+	
+If objFSO.FolderExists("C:\windows") Then		'Loading AF image.  Check first to see if Windows
+	
+  							'directory exists; if not create directory before copy.
+   
+  objFSO.CopyFile "ac62huImage.bmp", "C:\windows\ac60AirForceImage.bmp", OverwriteExisting          
+Else
+  
+  set objFolder = objFSO.CreateFolder("C:\Windows") 
+  objFSO.CopyFile "ac62huImage.bmp", "C:\Windows\ac60AirForceImage.bmp", OverwriteExisting 
+         
+End If
+
+
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient.   You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' to continue with the installation.You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 2 of 6:  Updating Windows Installer (for select Operating Systems) -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 3 of 6: Uninstalling ActivClient 6.1 (if necessary) -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 4 of 6: Installing ActivClient 6.2 Baseline Package -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 5 of 6: Installing ActivClient 6.2 Patch for Build 119 -- </font><font color = 'lime'>completed.</font><br></font><font color = 'yellow'>Step 6 of 6: Installing Outlook Web Access SMIME Component -- </font><font color = 'red'>in progress.</font>"
+
+strCmd = "setupmcl.exe"
+intRet = WshShell.Run(strCmd, 1, true)
+
+section1.InnerHTML = "<br><br><br><br><br><br><br><br><br><br><font color='yellow'><br>Please wait; installation is in process.  You may not see any activity for several minutes during certain steps, depending on your present workstation configuration.  Please be patient.   You may also see prompts asking you to approve certain actions.  Please select 'Allow','Yes','Continue' or 'OK' to continue with the installation.You will be notified when installation is complete. <br><br>Step 1 of 6:  Installing Trust in DoD and Air Force PKI Certificates -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 2 of 6:  Updating Windows Installer (for select Operating Systems) -- </font><font color = 'lime'>completed. <br></font><font color = 'yellow'>Step 3 of 6: Uninstalling ActivClient 6.1 (if necessary) -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 4 of 6: Installing ActivClient 6.2 Baseline Package -- </font><font color = 'lime'>completed. </font><br></font><font color = 'yellow'>Step 5 of 6: Installing ActivClient 6.2 Patch for Build 119 -- </font><font color = 'lime'>completed.</font><br></font><font color = 'yellow'>Step 6 of 6: Installing Outlook Web Access SMIME Component -- </font><font color = 'lime'>completed.</font>"
+
+      
+End Sub
+'
+'=====================================================================================
+'    Uninstall AC 6.2
+'=====================================================================================
+Sub UninstallAC()
+
+If (str64OS = 1) Then    'if 64-bit OS 
+    
+   
+
+    strCmd = "msiexec /x {86E45973-5352-439F-A115-2E8EE4D40140} /qb! REBOOT=ReallySuppress"
+    intRet = WshShell.Run (strCmd, 1, true)	
+
+Else                     'if 32-bit OS
+    
+    strCmd = "msiexec /x {1BE8806A-84F8-4655-A381-0D5524430944} /qb! REBOOT=ReallySuppress"
+    intRet = WshShell.Run (strCmd, 1, true)
+
+End If
+
+msgbox "ActivClient 6.2 uninstallation is complete. Please reboot your workstation as soon as practical in order to completely remove all ActivClient 6.2 files.",0,"AC 6.2 Home Use Uninstall" 
+		
+
+End Sub
+
+'******************************************************************************
+'   Home Use Risk Agreement
+'******************************************************************************
+Sub RiskAgreement()
+
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+strCmd = "homeuserisk.hta"
+intRet = WshShell.Run (strCmd,1,true)
+
+
+
+If objFSO.FolderExists("C:\Windows\agreedtorisk") Then            'If folder exists then user agreed
+	agreestatus = 1							      'Set Flag that risk was agreed to
+      objFSO.DeleteFolder("C:\Windows\agreedtorisk")			'Delete folder created temporarily
+	
+End If
+	
+
+End Sub 
+
+'==============================================================================
+'	Gather Operating System Info
+'==============================================================================
+sub Operating_System
+On Error Resume Next
+Set objWMIService = GetObject("winmgmts:\\" & ".")
+
+  If Err.Number = 0 Then                              'OS lower than Windows 2000 do not support WMI and should generate
+                                                      'an error.  If so, display error message to user and do not install.
+  
+      Set colOSes = objWMIService.ExecQuery _
+       ("Select * from Win32_OperatingSystem")
+      For Each objOS in colOSes
+        strOS = objOS.Caption
+        strSP =  objOS.ServicePackMajorVersion
+ 
+      Next
+      
+	    
+      If (instr(strOS, "2000")) > 0 Then                 'If Windows 2000 SP 4  then set flag to continue install
+          If strSP > 3 Then 
+              strExecuteCall = 1
+              strNeedInstaller = 1
+           End If
+      End If
+      
+      If (instr(strOS, "2003")) > 0 Then                 'If Windows 20003   then set flag to continue install
+          strExecuteCall = 1
+      End If
+
+      If (instr(strOS, "XP Professional")) > 0 then                 'If Windows XP Professional SP1 or higher then set flag to continue install
+          If strSP > 0 Then 
+            strExecuteCall = 1
+          End If
+          If strSP < 3 Then
+              strNeedInstaller = 1			'If not at least XP XP 3 then need Windows Installer 3.1 installed
+          End If
+      End If 
+
+ 	If (instr(strOS, "XP Home")) > 0 then                  'If Windows XP Home SP2 or higher then set flag to continue install
+          If strSP > 1 Then 
+            strExecuteCall = 1
+              If strSP < 3 Then
+                 strNeedInstaller = 1			'If not at least XP XP 3 then need Windows Installer 3.1 installed
+              End If
+          End If
+      End If 
+
+	If (instr(strOS, "Vista")) > 0 then                  'If Windows Vista then set flag to continue install
+          
+            strExecuteCall = 1
+          
+      End If 
+
+      If (instr(strOS, "Windows 7")) > 0 then                  'If Windows 7 then set flag to continue install
+          
+            strExecuteCall = 1
+          
+      End If 
+
+      If (instr(strOS, "2008")) > 0 then                  'If Windows Server 2008 then set flag to continue install
+          
+            strExecuteCall = 1
+          
+      End If 
+   
+      If strExecuteCall = 0 Then
+		msgbox "Your machine does not meet the minimum Operating System requirements for this software.  One of the following Operating Systems with appropriate Service Pack is required:  Windows 2000 Professional(Service Pack 4 or higher), Windows XP Home Edition (Service Pack 2 or higher), Windows XP Professional(Service Pack 1 or higher), Windows Vista (any edition) or Windows 7 (any edition).  Installation will be cancelled.",0,"AC 6.2 Home Use Installation"
+      Else                                 'Check for at least IE 5.5
+            
+		locMSIE = inStr(window.navigator.appversion, "MSIE")
+		locMSIE = locMSIE + 5
+		strIE = mid(window.navigator.appversion, locMSIE,3)
+		
+		If strIE < 5.5 Then
+   			msgbox "Your Internet Explorer needs to be upgraded before AC 6.2 can be installed.  Installation will not continue.  Please upgrade to IE 6.0 or higher then try the install again.",0,"AC 6.1 Home Use Installation"
+		      strExecuteCall = 0        'Set flag to stop install
+            End If
+
+      End If
+
+  Else 
+ 
+      msgbox "Your machine does not meet the minimum Operating System requirements for this software.  One of the following Operating Systems with appropriate Service Pack is required:  Windows 2000 Professional(Service Pack 4 or higher), Windows XP Home Edition (Service Pack 2 or higher), Windows XP Professional(Service Pack 1 or higher), Windows Vista (any edition) or Windows 7 (any edition).  Installation will be cancelled.",0,"AC 6.2 Home Use Installation"
+      Err.Clear()
+  End If
+
+Set objWMI = GetObject("winmgmts:\\" & "." & "\root\cimv2")
+
+strOSRegKey = WshShell.RegRead("HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment\PROCESSOR_ARCHITECTURE")
+
+if (instr(strOSRegKey, "64")) > 0 Then
+    str64OS = 1
+    Err.Clear
+    strAC61RegKey = WshShell.RegRead("HKLM\SOFTWARE\ActivCard\ActivClient\ProductName")
+    If Err.Number = 0 Then      'If AC 61 Registry Key Exists, check to see if 64-bit version
+        If (instr(strAC61RegKey,"64")) > 0 Then
+           strAC6164installed = 1
+        Else
+           strAC6132installed = 1    'Flag that 32-bit version of AC 6.1 is installed on 64-bit OS
+        End If
+    End If
+      
+End If
+
+  End Sub
+
+'*********************************************************************************
+'   User Screen
+'*********************************************************************************
+
+
+
+</script>
+
+<body STYLE="BACKGROUND:DarkBlue;FONT:14pt arial;COLOR:white">
+	<table border="0" width="98%" height="47" ID="Table1">
+		<tr>
+			<td width="84%" height="130">
+				<p align="center">
+					<font size="4"><b>AC 6.2 Air Force Release Home Use Install/Uninstall Utility</b></font></p>
+								<table border="0" width="75%" ID="Table5">
+					<tr>
+						<td width="150" style="WIDTH: 150px; HEIGHT: 39px"></td>
+						<td width="65%" style="HEIGHT: 39px"></td>
+					</tr>
+					<tr>
+						<td width="150" style="WIDTH: 150px"><input type="radio" name="UserOption2" value="1" ID="Radio3"></td>
+						<td width="95%"><b>Install ActivClient 6.2 Air Force Release</b> </td>
+					</tr>
+					<tr>
+						<td width="150" style="WIDTH: 150px"><input type="radio" name="UserOption2" value="2" ID="Radio4"></td>
+						<td width="95%"><b>Uninstall ActivClient 6.2 Air Force Release<b> </td>
+					</tr>
+					
+				</table>
+			</td>
+			<td width="17%" height="130"><p align="center"><img border="0" src="aflogo.jpg" width="146" height="149"></p>
+			</td>
+		<tr>
+			<td width="20%" height="41"></td>
+		</tr>
+	</table>
+	
+	<input type="button" value="Submit" name="btnOK" ID="Button1"> <input id="Exitbutton" type="button" value="Exit" name="Exitbutton" onClick="ExitSub">
+	<table border="0" width="100%" height="96" ID="Table4">
+		<tr>
+			<td width="100%" height="90">
+				<span id="section1" name="section1"></span>
+			</td>
+		</tr>
+	</table>
+	<p>&nbsp;</p>
+</body>
+
